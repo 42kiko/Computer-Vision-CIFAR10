@@ -10,4 +10,4 @@ You can explore all interactive Plotly figures on the GitHub Pages site:
 
 Click the image to open the interactive Plotly version in your browser:
 
-[![CIFAR-10 class distribution](plots/class_distribution.png "Open static class distribution image")](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/class_distribution.html "Open interactive Plotly version")
+[![CIFAR-10 class distribution](plots/class_distribution.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/class_distribution.html "Open interactive Plotly version")
