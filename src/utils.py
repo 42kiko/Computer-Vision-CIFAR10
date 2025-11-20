@@ -96,9 +96,6 @@ def save_fig(fig: Figure, name: str, scale: int = 2) -> None:
     print(f"Saved HTML to {html_path}")
     print(f"Saved PNG to {png_path}")
 
-
-
-
 # ---------------------------------------------------------------------------
 # Data loading and preprocessing
 # ---------------------------------------------------------------------------
@@ -119,7 +116,6 @@ class Cifar10Data:
     y_test : np.ndarray
         Test labels as integers, shape (N_test,).
     """
-
     x_train: np.ndarray
     y_train: np.ndarray
     x_test: np.ndarray
@@ -437,7 +433,7 @@ def evaluate_model(
 def save_model_with_history(
     model: keras.Model,
     history: keras.callbacks.History,
-    name: str
+    name: str,
 ) -> None:
     os.makedirs("models", exist_ok=True)
     os.makedirs("results", exist_ok=True)
@@ -456,9 +452,13 @@ def load_model(name: str) -> keras.Model:
 
 
 def load_history(name: str) -> keras.callbacks.History:
-    return keras.callbacks.History(f"results/history_{name}.json")
+    path = f"results/history_{name}.json"
+    with open(path) as f:
+        history_dict = json.load(f)
 
-
+    h = keras.callbacks.History()
+    h.history = history_dict
+    return h
 # ---------------------------------------------------------------------------
 # Prediction and reporting helpers
 # ---------------------------------------------------------------------------
