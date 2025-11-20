@@ -46,6 +46,19 @@ CLASS_NAMES: List[str] = [
     "truck",
 ]
 
+CLASS_NAMES_EMOJI: List[str] = [
+    "✈️",
+    "🚗",
+    "🦜",
+    "🐱",
+    "🫎",
+    "🐶",
+    "🐸",
+    "🐴",
+    "🛳️",
+    "🚛"
+]
+
 PLOTS_DIR: Final[Path] = Path("../plots")
 DOCS_DIR: Final[Path] = Path("../docs")
 
@@ -438,9 +451,9 @@ def save_model_with_history(
     os.makedirs("models", exist_ok=True)
     os.makedirs("results", exist_ok=True)
 
-    model.save(f"models/{name}.keras")
+    model.save(f"../models/{name}.keras")
 
-    with open(f"results/history_{name}.json", "w") as f:
+    with open(f"../results/history_{name}.json", "w") as f:
         json.dump(history.history, f)
 
     print(f"Saved model to models/{name}.keras")
@@ -448,11 +461,11 @@ def save_model_with_history(
 
 
 def load_model(name: str) -> keras.Model:
-    return keras.models.load_model(f"models/{name}.keras")
+    return keras.models.load_model(f"../models/{name}.keras")
 
 
 def load_history(name: str) -> keras.callbacks.History:
-    path = f"results/history_{name}.json"
+    path = f"../results/history_{name}.json"
     with open(path) as f:
         history_dict = json.load(f)
 
