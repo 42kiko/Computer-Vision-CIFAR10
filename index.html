@@ -87,10 +87,11 @@
 <body>
   <h1>CIFAR-10 – Interactive Visualizations</h1>
   <p class="subtitle">
-    Interactive Plotly figures generated from the <code>cifar10_exploration.ipynb</code> notebook.
+    Interactive Plotly figures generated from the CIFAR-10 EDA notebook and model evaluation.
   </p>
 
   <div class="grid">
+    <!-- Class distribution -->
     <div class="card">
       <div class="tag">📊 Class distribution</div>
       <h2>CIFAR-10 class distribution</h2>
@@ -104,6 +105,7 @@
       </a>
     </div>
 
+    <!-- Examples per class -->
     <div class="card">
       <div class="tag">🖼️ Image grid</div>
       <h2>Examples per class</h2>
@@ -112,6 +114,150 @@
         intuitive understanding of the dataset.
       </p>
       <a href="docs/examples_per_class.html" title="Open interactive examples-per-class plot">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Accuracy curves -->
+    <div class="card">
+      <div class="tag">📈 Training dynamics</div>
+      <h2>Accuracy over epochs</h2>
+      <p>
+        Inspect how training and validation accuracy evolve over time to check
+        convergence behaviour and potential overfitting.
+      </p>
+      <a href="docs/cifar10_acc.html" title="Open accuracy curves plot">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Loss curves -->
+    <div class="card">
+      <div class="tag">📉 Training dynamics</div>
+      <h2>Loss over epochs</h2>
+      <p>
+        Follow the training and validation loss curves to understand optimisation
+        progress and stability during training.
+      </p>
+      <a href="docs/cifar10_loss.html" title="Open loss curves plot">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Confusion matrix -->
+    <div class="card">
+      <div class="tag">🔢 Confusion matrix</div>
+      <h2>Class-wise confusion</h2>
+      <p>
+        Explore the normalised confusion matrix to see which classes are
+        reliably recognised and which ones are frequently confused.
+      </p>
+      <a href="docs/cifar10_confusion_matrix.html" title="Open confusion matrix plot">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Per-class accuracy -->
+    <div class="card">
+      <div class="tag">🎯 Per-class performance</div>
+      <h2>Per-class accuracy</h2>
+      <p>
+        Compare accuracy across all CIFAR-10 classes to identify particularly
+        strong and weak categories of the model.
+      </p>
+      <a href="docs/cifar10_per_class_accuracy.html" title="Open per-class accuracy plot">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Average confidence per true class -->
+    <div class="card">
+      <div class="tag">🔍 Confidence</div>
+      <h2>Average confidence per true class</h2>
+      <p>
+        See how confident the model is on average for the true label of each
+        class, even when it makes mistakes.
+      </p>
+      <a href="docs/cifar10_avg_confidence_per_true_class.html" title="Open average confidence plot">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Confidence histogram -->
+    <div class="card">
+      <div class="tag">🎯 Calibration</div>
+      <h2>Confidence: correct vs wrong</h2>
+      <p>
+        Compare the confidence distribution of correct and wrong predictions to
+        understand how well-calibrated the model is.
+      </p>
+      <a href="docs/cifar10_confidence_hist.html" title="Open confidence histogram plot">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Top 1% correct -->
+    <div class="card">
+      <div class="tag">🏆 Best cases</div>
+      <h2>Top 1% most confident correct</h2>
+      <p>
+        Browse the samples where the model is extremely confident and correct –
+        these represent the easiest cases for the network.
+      </p>
+      <a href="docs/cifar10_top_1_percent_correct_predictions.html"
+         title="Open top 1% most confident correct predictions grid">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Top 1% wrong -->
+    <div class="card">
+      <div class="tag">⚠️ Failure modes</div>
+      <h2>Top 1% most confident wrong</h2>
+      <p>
+        Inspect the most confidently wrong predictions to reveal surprising
+        failure modes and visually similar confusing examples.
+      </p>
+      <a href="docs/cifar10_top_1_percent_wrong_predictions.html"
+         title="Open top 1% most confident wrong predictions grid">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Hard but correct grid -->
+    <div class="card">
+      <div class="tag">🧩 Edge cases</div>
+      <h2>Hard but correct predictions</h2>
+      <p>
+        View samples that are correctly classified but with low confidence.
+        These are borderline cases where the model is uncertain.
+      </p>
+      <a href="docs/cifar10_hard_prediction_grid.html"
+         title="Open hard-but-correct prediction grid">
+        Open plot
+        <span>↗</span>
+      </a>
+    </div>
+
+    <!-- Misclassification grid -->
+    <div class="card">
+      <div class="tag">🔁 Misclassifications</div>
+      <h2>Misclassification grid</h2>
+      <p>
+        Explore a grid of misclassified images to visually inspect how the
+        predicted class differs from the true label.
+      </p>
+      <a href="docs/cifar10_misclassification_grid.html"
+         title="Open misclassification image grid">
         Open plot
         <span>↗</span>
       </a>
