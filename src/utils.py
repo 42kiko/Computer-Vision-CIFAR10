@@ -1,0 +1,554 @@
+"""
+Utility functions for CIFAR-10 classification with TensorFlow / Keras.
+
+This module provides:
+- Reproducible setup
+- CIFAR-10 loading and preprocessing
+- Data augmentation pipeline
+- A reasonably strong CNN architecture for CIFAR-10
+- Model compilation, training, evaluation and prediction helpers
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import tensorflow as tf
+from sklearn.metrics import classification_report, confusion_matrix
+from tensorflow import keras
+from tensorflow.keras import layers
+import os
+import json
+
+from pathlib import Path
+from typing import Final
+from plotly.graph_objects import Figure
+
+# ---------------------------------------------------------------------------
+# Global constants
+# ---------------------------------------------------------------------------
+
+INPUT_SHAPE: Tuple[int, int, int] = (32, 32, 3)
+NUM_CLASSES: int = 10
+
+CLASS_NAMES: List[str] = [
+    "airplane",
+    "automobile",
+    "bird",
+    "cat",
+    "deer",
+    "dog",
+    "frog",
+    "horse",
+    "ship",
+    "truck",
+]
+
+PLOTS_DIR: Final[Path] = Path("../plots")
+DOCS_DIR: Final[Path] = Path("../docs")
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility
+# ---------------------------------------------------------------------------
+
+def set_global_seed(seed: int = 42) -> None:
+    """
+    Set global random seeds for reproducibility.
+
+    Parameters
+    ----------
+    seed : int, default 42
+        Seed value used for NumPy and TensorFlow.
+    """
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+
+
+def save_fig(fig: Figure, name: str, scale: int = 2) -> None:
+    """
+    Save a Plotly figure as both HTML and PNG.
+
+    Parameters
+    ----------
+    fig : Figure
+        The Plotly figure to be saved.
+    name : str
+        Base file name without extension.
+    scale : int, default 2
+        Scale factor for the PNG export (higher = higher resolution).
+    """
+    # Ensure output directories exist
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+
+    html_path = DOCS_DIR / f"{name}.html"
+    png_path = PLOTS_DIR / f"{name}.png"
+
+    # Save interactive HTML file
+    fig.write_html(str(html_path), include_plotlyjs="cdn")
+
+    # Save static PNG image (requires kaleido)
+    fig.write_image(str(png_path), scale=scale)
+
+    print(f"Saved HTML to {html_path}")
+    print(f"Saved PNG to {png_path}")
+
+
+
+
+# ---------------------------------------------------------------------------
+# Data loading and preprocessing
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Cifar10Data:
+    """
+    Container for CIFAR-10 data.
+
+    Attributes
+    ----------
+    x_train : np.ndarray
+        Training images, shape (N_train, 32, 32, 3), dtype float32.
+    y_train : np.ndarray
+        Training labels as integers, shape (N_train,).
+    x_test : np.ndarray
+        Test images, shape (N_test, 32, 32, 3), dtype float32.
+    y_test : np.ndarray
+        Test labels as integers, shape (N_test,).
+    """
+
+    x_train: np.ndarray
+    y_train: np.ndarray
+    x_test: np.ndarray
+    y_test: np.ndarray
+
+
+def load_cifar10(normalize: bool = True) -> Cifar10Data:
+    """
+    Load CIFAR-10 dataset and optionally normalize images to [0, 1].
+
+    Parameters
+    ----------
+    normalize : bool, default True
+        If True, images are scaled to the range [0, 1].
+
+    Returns
+    -------
+    Cifar10Data
+        Dataclass containing train and test splits.
+    """
+    (x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+
+    # Flatten labels from shape (N, 1) to (N,)
+    y_train = y_train.reshape(-1)
+    y_test = y_test.reshape(-1)
+
+    x_train = x_train.astype("float32")
+    x_test = x_test.astype("float32")
+
+    if normalize:
+        x_train /= 255.0
+        x_test /= 255.0
+
+    return Cifar10Data(x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test)
+
+
+# ---------------------------------------------------------------------------
+# Data augmentation
+# ---------------------------------------------------------------------------
+
+def create_data_augmentation() -> keras.Sequential:
+    """
+    Create a data augmentation pipeline for CIFAR-10 images.
+
+    This uses common and effective augmentations:
+    - Random horizontal flips
+    - Small random rotations
+    - Small random zoom
+
+    Returns
+    -------
+    keras.Sequential
+        Keras Sequential model containing augmentation layers.
+    """
+    data_augmentation = keras.Sequential(
+        [
+            layers.RandomFlip("horizontal"),
+            layers.RandomRotation(0.08),
+            layers.RandomZoom(0.08),
+        ],
+        name="data_augmentation",
+    )
+    return data_augmentation
+
+
+# ---------------------------------------------------------------------------
+# Model architecture
+# ---------------------------------------------------------------------------
+
+def build_cifar10_cnn(
+    input_shape: Tuple[int, int, int] = INPUT_SHAPE,
+    num_classes: int = NUM_CLASSES,
+    data_augmentation: Optional[keras.Model] = None,
+) -> keras.Model:
+    """
+    Build a CNN model for CIFAR-10 classification.
+
+    The architecture follows common best practices:
+    - Input rescaling to [0, 1] if not already normalized
+    - Optional data augmentation block
+    - Stacked Conv2D + BatchNorm + ReLU blocks
+    - MaxPooling and Dropout for downsampling and regularization
+    - Dense head with Dropout before the final softmax layer
+
+    Parameters
+    ----------
+    input_shape : tuple[int, int, int], default (32, 32, 3)
+        Shape of the input images.
+    num_classes : int, default 10
+        Number of classes in CIFAR-10.
+    data_augmentation : keras.Model or None, default None
+        If provided, this model is applied to the inputs for data augmentation.
+
+    Returns
+    -------
+    keras.Model
+        Uncompiled Keras model ready for training.
+    """
+    inputs = keras.Input(shape=input_shape)
+
+    x: tf.Tensor = inputs
+
+    # Optional augmentation block (only active during training)
+    if data_augmentation is not None:
+        x = data_augmentation(x)
+
+    # If you pass raw uint8 images into the model, keep this.
+    # If you normalize externally to [0, 1], you can remove this layer.
+    x = layers.Rescaling(1.0 / 255.0, name="rescaling")(x)
+
+    # Block 1
+    x = layers.Conv2D(32, (3, 3), padding="same", use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation("relu")(x)
+    x = layers.Conv2D(32, (3, 3), padding="same", use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation("relu")(x)
+    x = layers.MaxPooling2D((2, 2))(x)
+    x = layers.Dropout(0.25)(x)
+
+    # Block 2
+    x = layers.Conv2D(64, (3, 3), padding="same", use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation("relu")(x)
+    x = layers.Conv2D(64, (3, 3), padding="same", use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation("relu")(x)
+    x = layers.MaxPooling2D((2, 2))(x)
+    x = layers.Dropout(0.30)(x)
+
+    # Block 3
+    x = layers.Conv2D(128, (3, 3), padding="same", use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation("relu")(x)
+    x = layers.Conv2D(128, (3, 3), padding="same", use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation("relu")(x)
+    x = layers.MaxPooling2D((2, 2))(x)
+    x = layers.Dropout(0.40)(x)
+
+    # Classification head
+    x = layers.GlobalAveragePooling2D()(x)
+    x = layers.Dense(256, activation="relu")(x)
+    x = layers.Dropout(0.50)(x)
+    outputs = layers.Dense(num_classes, activation="softmax")(x)
+
+    model = keras.Model(inputs=inputs, outputs=outputs, name="cifar10_cnn")
+    return model
+
+
+# ---------------------------------------------------------------------------
+# Compilation, training and evaluation
+# ---------------------------------------------------------------------------
+
+def compile_model(
+    model: keras.Model,
+    learning_rate: float = 1e-3,
+) -> None:
+    """
+    Compile the model with a sensible default optimizer and loss.
+
+    Parameters
+    ----------
+    model : keras.Model
+        Model to compile.
+    learning_rate : float, default 1e-3
+        Learning rate for the Adam optimizer.
+    """
+    optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+
+    model.compile(
+        optimizer=optimizer,
+        loss="sparse_categorical_crossentropy",
+        metrics=["accuracy"],
+    )
+
+
+def create_default_callbacks(
+    patience_reduce_lr: int = 3,
+    patience_early_stop: int = 8,
+    min_lr: float = 1e-6,
+) -> List[keras.callbacks.Callback]:
+    """
+    Create a list of default callbacks for training.
+
+    Includes:
+    - ReduceLROnPlateau to lower learning rate when validation accuracy plateaus
+    - EarlyStopping to stop training when no more improvement is observed
+
+    Parameters
+    ----------
+    patience_reduce_lr : int, default 3
+        Number of epochs with no improvement after which learning rate is reduced.
+    patience_early_stop : int, default 8
+        Number of epochs with no improvement after which training is stopped.
+    min_lr : float, default 1e-6
+        Lower bound on the learning rate.
+
+    Returns
+    -------
+    list[keras.callbacks.Callback]
+        List of configured callbacks.
+    """
+    reduce_lr = keras.callbacks.ReduceLROnPlateau(
+        monitor="val_accuracy",
+        factor=0.5,
+        patience=patience_reduce_lr,
+        min_lr=min_lr,
+        verbose=1,
+    )
+
+    early_stop = keras.callbacks.EarlyStopping(
+        monitor="val_accuracy",
+        patience=patience_early_stop,
+        restore_best_weights=True,
+        verbose=1,
+    )
+
+    return [reduce_lr, early_stop]
+
+
+def train_model(
+    model: keras.Model,
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_val: Optional[np.ndarray] = None,
+    y_val: Optional[np.ndarray] = None,
+    batch_size: int = 64,
+    epochs: int = 30,
+    callbacks: Optional[List[keras.callbacks.Callback]] = None,
+    validation_split: float = 0.1,
+) -> keras.callbacks.History:
+    """
+    Train the model on CIFAR-10 training data.
+
+    Parameters
+    ----------
+    model : keras.Model
+        Compiled Keras model.
+    x_train : np.ndarray
+        Training images, shape (N_train, 32, 32, 3).
+    y_train : np.ndarray
+        Training labels as integers, shape (N_train,).
+    x_val : np.ndarray or None, default None
+        Optional validation images. If None, `validation_split` is used.
+    y_val : np.ndarray or None, default None
+        Optional validation labels.
+    batch_size : int, default 64
+        Training batch size.
+    epochs : int, default 30
+        Maximum number of training epochs.
+    callbacks : list[keras.callbacks.Callback] or None, default None
+        Additional callbacks. If None, default callbacks are created.
+    validation_split : float, default 0.1
+        Fraction of training data to use for validation if x_val is None.
+
+    Returns
+    -------
+    keras.callbacks.History
+        Keras History object containing training logs.
+    """
+    if callbacks is None:
+        callbacks = create_default_callbacks()
+
+    if x_val is not None and y_val is not None:
+        validation_data = (x_val, y_val)
+        history = model.fit(
+            x_train,
+            y_train,
+            batch_size=batch_size,
+            epochs=epochs,
+            validation_data=validation_data,
+            callbacks=callbacks,
+            verbose=1,
+        )
+    else:
+        history = model.fit(
+            x_train,
+            y_train,
+            batch_size=batch_size,
+            epochs=epochs,
+            validation_split=validation_split,
+            callbacks=callbacks,
+            verbose=1,
+        )
+
+    return history
+
+
+def evaluate_model(
+    model: keras.Model,
+    x_test: np.ndarray,
+    y_test: np.ndarray,
+) -> Dict[str, float]:
+    """
+    Evaluate the model on the test set.
+
+    Parameters
+    ----------
+    model : keras.Model
+        Trained Keras model.
+    x_test : np.ndarray
+        Test images, shape (N_test, 32, 32, 3).
+    y_test : np.ndarray
+        Test labels as integers, shape (N_test,).
+
+    Returns
+    -------
+    dict
+        Dictionary with keys 'loss' and 'accuracy'.
+    """
+    loss, acc = model.evaluate(x_test, y_test, verbose=0)
+    return {"loss": float(loss), "accuracy": float(acc)}
+
+def save_model_with_history(
+    model: keras.Model,
+    history: keras.callbacks.History,
+    name: str
+) -> None:
+    os.makedirs("models", exist_ok=True)
+    os.makedirs("results", exist_ok=True)
+
+    model.save(f"models/{name}.keras")
+
+    with open(f"results/history_{name}.json", "w") as f:
+        json.dump(history.history, f)
+
+    print(f"Saved model to models/{name}.keras")
+    print(f"Saved history to results/history_{name}.json")
+
+
+def load_model(name: str) -> keras.Model:
+    return keras.models.load_model(f"models/{name}.keras")
+
+
+def load_history(name: str) -> keras.callbacks.History:
+    return keras.callbacks.History(f"results/history_{name}.json")
+
+
+# ---------------------------------------------------------------------------
+# Prediction and reporting helpers
+# ---------------------------------------------------------------------------
+
+def predict_classes(
+    model: keras.Model,
+    x: np.ndarray,
+    batch_size: int = 128,
+) -> np.ndarray:
+    """
+    Predict class indices for the given images.
+
+    Parameters
+    ----------
+    model : keras.Model
+        Trained Keras model.
+    x : np.ndarray
+        Input images, shape (N, 32, 32, 3).
+    batch_size : int, default 128
+        Batch size for prediction.
+
+    Returns
+    -------
+    np.ndarray
+        Predicted class indices, shape (N,).
+    """
+    probs = model.predict(x, batch_size=batch_size, verbose=0)
+    preds = np.argmax(probs, axis=1)
+    return preds
+
+
+def classification_report_str(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    target_names: Optional[List[str]] = None,
+) -> str:
+    """
+    Generate a text classification report.
+
+    Parameters
+    ----------
+    y_true : np.ndarray
+        True labels as integers.
+    y_pred : np.ndarray
+        Predicted labels as integers.
+    target_names : list[str] or None, default None
+        Optional list of class names.
+
+    Returns
+    -------
+    str
+        Multi-line text report.
+    """
+    if target_names is None:
+        target_names = CLASS_NAMES
+
+    return classification_report(
+        y_true,
+        y_pred,
+        target_names=target_names,
+        digits=4,
+    )
+
+
+def confusion_matrix_array(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    normalize: bool = False,
+) -> np.ndarray:
+    """
+    Compute the confusion matrix between true and predicted labels.
+
+    Parameters
+    ----------
+    y_true : np.ndarray
+        True labels as integers.
+    y_pred : np.ndarray
+        Predicted labels as integers.
+    normalize : bool, default False
+        If True, normalize the confusion matrix row-wise.
+
+    Returns
+    -------
+    np.ndarray
+        Confusion matrix of shape (num_classes, num_classes).
+    """
+    cm = confusion_matrix(y_true, y_pred, labels=range(NUM_CLASSES))
+    if normalize:
+        cm = cm.astype("float32")
+        row_sums = cm.sum(axis=1, keepdims=True)
+        row_sums = np.where(row_sums == 0.0, 1.0, row_sums)
+        cm /= row_sums
+    return cm
