@@ -62,6 +62,51 @@ CLASS_NAMES_EMOJI: List[str] = [
 PLOTS_DIR: Final[Path] = Path("../plots")
 DOCS_DIR: Final[Path] = Path("../docs")
 
+from typing import Final
+import numpy as np
+from PIL import Image, ImageFilter
+
+UPSCALE_FACTOR: Final[int] = 4  # 32x32 -> 128x128
+
+def upscale_and_sharpen(
+    img: np.ndarray,
+    scale: int = UPSCALE_FACTOR,
+    strength: str = "medium",
+) -> np.ndarray:
+    """
+    Upscale a CIFAR-10 image and apply a sharpening filter.
+
+    Parameters
+    ----------
+    img : np.ndarray
+        Image array of shape (H, W, 3), e.g. 32x32x3.
+    scale : int
+        Upscaling factor.
+    strength : {"light", "medium", "strong"}
+        Controls how aggressive the sharpening is.
+
+    Returns
+    -------
+    np.ndarray
+        Upscaled and sharpened image as uint8.
+    """
+    pil_img = Image.fromarray(img.astype("uint8"))
+
+    new_size = (pil_img.width * scale, pil_img.height * scale)
+    pil_up = pil_img.resize(new_size, resample=Image.Resampling.LANCZOS)
+
+    if strength == "light":
+        radius, percent, threshold = 1.0, 150, 3
+    elif strength == "strong":
+        radius, percent, threshold = 1.5, 250, 0
+    else:  # "medium"
+        radius, percent, threshold = 1.2, 200, 1
+
+    pil_sharp = pil_up.filter(
+        ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold)
+    )
+
+    return np.array(pil_sharp, dtype=np.uint8)
 
 # ---------------------------------------------------------------------------
 # Reproducibility
