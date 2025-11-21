@@ -15,12 +15,12 @@ The core model is a compact CNN built with TensorFlow / Keras using:
 - a dense classification head with softmax over 10 classes
 
 ---
+
 ## 📂 Project structure
 
 The repository is organised as follows:
 
 ```text
-
 Computer-Vision-CIFAR10/
 ├── docs/                       # Interactive Plotly HTML exports (for GitHub Pages)
 │   ├── cifar10_acc.html
@@ -68,9 +68,7 @@ Computer-Vision-CIFAR10/
 │
 ├── index.html                  # Landing page for GitHub Pages (interactive gallery)
 └── README.md                   # Project documentation (this file)
-
 ```
-
 
 ---
 
@@ -133,3 +131,85 @@ In the notebooks and interactive plots you can explore:
 
 For full details, see the notebooks in `notebooks/` and the interactive
 visualisations on the GitHub Pages dashboard linked above.
+
+---
+
+## 🔍 Highlighted evaluation plots
+
+Below are some of the most interesting plots with direct links to their
+interactive counterparts.
+
+### 📉 Training accuracy over epochs
+
+How fast and how far does the model learn?  
+This plot shows training and validation accuracy over time.
+
+[![Training accuracy](plots/cifar10_acc.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_acc.html "Open interactive Plotly version")
+
+---
+
+### 📉 Training loss over epochs
+
+Complement to accuracy: the loss curve helps to see whether the model is still
+improving or has started to overfit.
+
+[![Training loss](plots/cifar10_loss.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_loss.html "Open interactive Plotly version")
+
+---
+
+### 🧩 Confusion matrix
+
+The confusion matrix summarises which classes the model gets right and where it
+tends to make mistakes. Bright off-diagonal cells indicate frequent confusion.
+
+[![Confusion matrix](plots/cifar10_confusion_matrix.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_confusion_matrix.html "Open interactive Plotly version")
+
+---
+
+### 🎯 Per-class accuracy
+
+Some classes are harder than others.  
+This bar chart shows the accuracy for each CIFAR-10 class individually.
+
+[![Per-class accuracy](plots/cifar10_per_class_accuracy.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_per_class_accuracy.html "Open interactive Plotly version")
+
+---
+
+### 📊 Confidence distribution (correct vs wrong)
+
+How calibrated is the model?  
+This histogram compares predicted probabilities for the predicted class on:
+
+- correctly classified samples  
+- misclassified samples  
+
+[![Confidence histogram](plots/cifar10_confidence_hist.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_confidence_hist.html "Open interactive Plotly version")
+
+---
+
+### 📈 Average confidence per true class
+
+Here you can see, for each true class, how confident the model is on average
+about its predictions. This helps to spot overconfident or underconfident
+classes.
+
+[![Average confidence per true class](plots/cifar10_avg_confidence_per_true_class.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_avg_confidence_per_true_class.html "Open interactive Plotly version")
+
+---
+
+### 🏅 Top 1 % most confident correct predictions
+
+These are the “easiest” samples for the model – images where it is extremely
+confident *and* correct. Useful to see what the model has really internalised.
+
+[![Top 1% most confident correct predictions](plots/cifar10_top_1_percent_correct_predictions.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_top_1_percent_correct_predictions.html "Open interactive Plotly version")
+
+---
+
+### ⚠️ Top 1 % most confident wrong predictions
+
+Even more interesting: images where the model is *very* confident, but still
+wrong. These often reveal dataset issues, label noise or systematic weaknesses
+in the model.
+
+[![Top 1% most confident wrong predictions](plots/cifar10_top_1_percent_wrong_predictions.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_top_1_percent_wrong_predictions.html "Open interactive Plotly version")
