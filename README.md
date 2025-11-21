@@ -14,9 +14,63 @@ The core model is a compact CNN built with TensorFlow / Keras using:
 - stacked convolutional blocks (Conv2D → BatchNorm → ReLU → MaxPooling → Dropout)
 - a dense classification head with softmax over 10 classes
 
-> *(Optional – add your own architecture image here, e.g.):*
->
-> `![CNN architecture](plots/cifar10_model_architecture.png)`
+---
+## 📂 Project structure
+
+The repository is organised as follows:
+
+```text
+
+Computer-Vision-CIFAR10/
+├── docs/                       # Interactive Plotly HTML exports (for GitHub Pages)
+│   ├── cifar10_acc.html
+│   ├── cifar10_avg_confidence_per_true_class.html
+│   ├── cifar10_confidence_hist.html
+│   ├── cifar10_confusion_matrix.html
+│   ├── cifar10_hard_prediction_grid.html
+│   ├── cifar10_loss.html
+│   ├── cifar10_misclassification_grid.html
+│   ├── cifar10_per_class_accuracy.html
+│   ├── cifar10_top_1_percent_correct_predictions.html
+│   ├── cifar10_top_1_percent_wrong_predictions.html
+│   ├── class_distribution.html
+│   └── examples_per_class.html
+│
+├── models/                     # Saved Keras models
+│   └── cifar10_main.keras
+│
+├── notebooks/                  # Jupyter notebooks (EDA and training)
+│   ├── CNN-CIFAR10-NOTEBOOK.ipynb
+│   └── EDA.ipynb
+│
+├── plots/                      # Static PNG previews for README and index.html
+│   ├── cifar10_acc.png
+│   ├── cifar10_avg_confidence_per_true_class.png
+│   ├── cifar10_confidence_hist.png
+│   ├── cifar10_confusion_matrix.png
+│   ├── cifar10_hard_prediction_grid.png
+│   ├── cifar10_loss.png
+│   ├── cifar10_misclassification_grid.png
+│   ├── cifar10_per_class_accuracy.png
+│   ├── cifar10_top_1_percent_correct_predictions.png
+│   ├── cifar10_top_1_percent_wrong_predictions.png
+│   ├── class_distribution.png
+│   └── examples_per_class.png
+│
+├── results/                    # Serialized training history and metrics
+│   └── history_cifar10_main.json
+│
+├── src/                        # Reusable Python modules
+│   └── utils.py
+│
+├── tests/                      # Unit tests
+│   └── test_utils.py
+│
+├── index.html                  # Landing page for GitHub Pages (interactive gallery)
+└── README.md                   # Project documentation (this file)
+
+```
+
 
 ---
 
