@@ -213,3 +213,25 @@ wrong. These often reveal dataset issues, label noise or systematic weaknesses
 in the model.
 
 [![Top 1% most confident wrong predictions](plots/cifar10_top_1_percent_wrong_predictions.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_top_1_percent_wrong_predictions.html "Open interactive Plotly version")
+
+---
+
+### 🧪 Misclassification grid
+
+This grid focuses specifically on **wrong predictions**.
+
+Each tile shows a misclassified image together with:
+
+- the **true class** (what it really is)  
+- the **predicted class** (what the model thought it was)  
+- the **model confidence** for its (wrong) prediction  
+
+By scanning this grid you can quickly spot:
+
+- which visual patterns tend to confuse the model  
+- recurring error types (e.g. 🐱 cats vs. 🐶 dogs, ✈️ airplanes vs. 🛳️ ships)  
+- whether the model is confidently wrong or mostly unsure on difficult samples  
+
+Click the image to open the interactive Plotly version in your browser:
+
+[![Misclassification grid](plots/cifar10_misclassification_grid.png)](https://42kiko.github.io/Computer-Vision-CIFAR10/docs/cifar10_misclassification_grid.html "Open interactive Plotly version")
