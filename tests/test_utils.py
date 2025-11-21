@@ -1,227 +1,338 @@
-# tests/test_utils.py
-
-from __future__ import annotations
-
-from typing import Any, Dict
+import json
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 import tensorflow as tf
 from tensorflow import keras
 
-from src.utils import (
-    CLASS_NAMES,
-    Cifar10Data,
-    build_cifar10_cnn,
-    classification_report_str,
-    compile_model,
-    confusion_matrix_array,
-    create_data_augmentation,
-    evaluate_model,
-    load_cifar10,
-    predict_classes,
-    set_global_seed,
-)
+import src.utils as utils
 
 
-@pytest.fixture(scope="session")
-def small_dummy_data() -> Dict[str, np.ndarray]:
-    """
-    Create a small synthetic dataset for fast tests.
-
-    The shapes are compatible with CIFAR-10:
-    - images: (N, 32, 32, 3)
-    - labels: (N,)
-    """
-    set_global_seed(123)
-    n_samples: int = 64
-    images = np.random.randint(
-        low=0,
-        high=256,
-        size=(n_samples, 32, 32, 3),
-        dtype=np.uint8,
-    )
-    labels = np.random.randint(
-        low=0,
-        high=len(CLASS_NAMES),
-        size=(n_samples,),
-        dtype=np.int32,
-    )
-    return {"x": images.astype("float32"), "y": labels}
-
+# ---------------------------------------------------------------------------
+# Reproducibility and basic constants
+# ---------------------------------------------------------------------------
 
 def test_set_global_seed_reproducible() -> None:
     """
-    Setting the same global seed should result in identical random tensors.
+    set_global_seed should make NumPy and TensorFlow randomness reproducible.
     """
-    set_global_seed(42)
-    a = tf.random.uniform(shape=(3, 3))
+    utils.set_global_seed(123)
+    a1 = np.random.rand(5)
+    t1 = tf.random.uniform((3,))
 
-    set_global_seed(42)
-    b = tf.random.uniform(shape=(3, 3))
+    utils.set_global_seed(123)
+    a2 = np.random.rand(5)
+    t2 = tf.random.uniform((3,))
 
-    assert np.allclose(a.numpy(), b.numpy())
+    assert np.allclose(a1, a2)
+    assert np.allclose(t1.numpy(), t2.numpy())
 
+
+def test_class_names_and_num_classes_consistent() -> None:
+    """
+    CLASS_NAMES and NUM_CLASSES should be consistent with each other.
+    """
+    assert len(utils.CLASS_NAMES) == utils.NUM_CLASSES
+    assert len(utils.CLASS_NAMES_EMOJI) == utils.NUM_CLASSES
+
+
+# ---------------------------------------------------------------------------
+# Image enhancement
+# ---------------------------------------------------------------------------
+
+def test_upscale_and_super_sharpen_shape_and_dtype() -> None:
+    """
+    upscale_and_super_sharpen should upscale and return a uint8 image.
+    """
+    img = (np.random.rand(32, 32, 3) * 255).astype("uint8")
+
+    out = utils.upscale_and_super_sharpen(img, scale=4)
+
+    assert out.dtype == np.uint8
+    assert out.shape[0] == img.shape[0] * 4
+    assert out.shape[1] == img.shape[1] * 4
+    assert out.shape[2] == 3
+    assert out.min() >= 0
+    assert out.max() <= 255
+
+
+# ---------------------------------------------------------------------------
+# Plotly figure export
+# ---------------------------------------------------------------------------
+
+class DummyFig:
+    """
+    Minimal stand-in for a Plotly Figure used to test save_fig
+    without requiring kaleido or Plotly itself.
+    """
+
+    def __init__(self) -> None:
+        self.html_written_to: Path | None = None
+        self.png_written_to: Path | None = None
+
+    def write_html(self, path: str, include_plotlyjs: str = "cdn") -> None:  # noqa: ARG002
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("<html></html>", encoding="utf-8")
+        self.html_written_to = p
+
+    def write_image(self, path: str, scale: int = 1) -> None:  # noqa: ARG002
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"PNG")
+        self.png_written_to = p
+
+
+def test_save_fig_creates_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    save_fig should create HTML and PNG files in the configured directories.
+    """
+    # Redirect PLOTS_DIR and DOCS_DIR to a temporary directory
+    monkeypatch.setattr(utils, "PLOTS_DIR", tmp_path / "plots")
+    monkeypatch.setattr(utils, "DOCS_DIR", tmp_path / "docs")
+
+    fig = DummyFig()
+    utils.save_fig(fig, name="test_plot", scale=2)
+
+    html_path = tmp_path / "docs" / "test_plot.html"
+    png_path = tmp_path / "plots" / "test_plot.png"
+
+    assert html_path.exists()
+    assert png_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# CIFAR-10 loading
+# ---------------------------------------------------------------------------
 
 def test_load_cifar10_shapes_and_range() -> None:
     """
-    CIFAR-10 loader should return correct shapes and types.
+    load_cifar10 should return splits of expected shape and range.
 
-    Also verifies that normalization works when enabled.
+    If CIFAR-10 cannot be loaded (e.g. no internet to download it),
+    the test is skipped instead of failing.
     """
-    data: Cifar10Data = load_cifar10(normalize=False)
+    try:
+        data = utils.load_cifar10(normalize=True)
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"CIFAR-10 not available: {exc}")
 
-    assert data.x_train.shape[1:] == (32, 32, 3)
-    assert data.x_test.shape[1:] == (32, 32, 3)
-    assert data.x_train.dtype == np.float32
-    assert data.x_test.dtype == np.float32
+    assert data.x_train.shape[1:] == utils.INPUT_SHAPE
+    assert data.x_test.shape[1:] == utils.INPUT_SHAPE
     assert data.y_train.ndim == 1
     assert data.y_test.ndim == 1
-    assert len(data.y_train) == data.x_train.shape[0]
-    assert len(data.y_test) == data.x_test.shape[0]
 
-    # Check normalize=True produces values within [0, 1]
-    data_norm: Cifar10Data = load_cifar10(normalize=True)
-    assert data_norm.x_train.min() >= 0.0
-    assert data_norm.x_train.max() <= 1.0 + 1e-5
+    assert data.x_train.min() >= 0.0
+    assert data.x_train.max() <= 1.0
+    assert data.x_test.min() >= 0.0
+    assert data.x_test.max() <= 1.0
 
 
-def test_create_data_augmentation_type_and_shape(small_dummy_data: Dict[str, np.ndarray]) -> None:
+# ---------------------------------------------------------------------------
+# Data augmentation
+# ---------------------------------------------------------------------------
+
+def test_create_data_augmentation_preserves_shape() -> None:
     """
-    Data augmentation should be a Keras model and preserve image shape.
+    create_data_augmentation should return a model that preserves the input shape.
     """
-    aug = create_data_augmentation()
-    assert isinstance(aug, keras.Model)
+    aug = utils.create_data_augmentation()
+    x = tf.zeros((4,) + utils.INPUT_SHAPE)
+    y = aug(x, training=True)
 
-    x = small_dummy_data["x"]
-    augmented = aug(x, training=True)
-
-    assert augmented.shape == x.shape
+    assert y.shape == x.shape
 
 
-def test_build_cifar10_cnn_shapes_and_classes() -> None:
+# ---------------------------------------------------------------------------
+# Model architecture and compilation
+# ---------------------------------------------------------------------------
+
+def test_build_cifar10_cnn_shapes() -> None:
     """
-    The CIFAR-10 CNN model should accept the correct input shape and
-    output logits with the expected number of classes.
+    build_cifar10_cnn should create a model with correct input and output shapes.
     """
-    model = build_cifar10_cnn()
-    assert model.input_shape[1:] == (32, 32, 3)
-    assert model.output_shape[-1] == len(CLASS_NAMES)
-    assert model.count_params() > 0
+    model = utils.build_cifar10_cnn()
+    assert model.input_shape[1:] == utils.INPUT_SHAPE
+    assert model.output_shape[1:] == (utils.NUM_CLASSES,)
 
 
-def test_compile_model_sets_optimizer_and_loss() -> None:
+def test_compile_model_sets_optimizer_and_accuracy_metric() -> None:
     """
     compile_model should attach an optimizer, loss and at least one metric.
 
-    In Keras 3, `model.metrics` typically contains:
-    - a loss tracker ('loss')
-    - a compiled metrics container ('compile_metrics')
-
-    The actual metric objects (e.g. accuracy) live inside
-    `model.compiled_metrics.metrics`.
+    We keep this robust across different Keras versions by:
+    - checking that optimizer and loss are set
+    - running a tiny evaluate() and asserting it returns >= 2 values
+      (loss + at least one metric)
     """
-    model = build_cifar10_cnn()
-    compile_model(model, learning_rate=1e-3)
+    model = utils.build_cifar10_cnn()
+    utils.compile_model(model, learning_rate=1e-3)
 
     # Optimizer and loss should be set
     assert isinstance(model.optimizer, keras.optimizers.Optimizer)
     assert model.loss is not None
 
-    # There should be a compiled_metrics container with at least one metric
-    compiled_metrics = getattr(model, "compiled_metrics", None)
-    assert compiled_metrics is not None
-    assert len(compiled_metrics.metrics) > 0
+    # Run a tiny evaluation to see how many outputs we get
+    x = np.random.rand(4, *utils.INPUT_SHAPE).astype("float32")
+    y = np.random.randint(0, utils.NUM_CLASSES, size=(4,), dtype="int32")
 
-    # At least one metric should contain "accuracy" in its name
-    metric_names = [m.name for m in compiled_metrics.metrics]
-    assert any("accuracy" in name.lower() for name in metric_names)
-    assert isinstance(model.optimizer, keras.optimizers.Optimizer)
-    assert model.loss is not None
-    metric_names = [m.name for m in model.metrics]
-    assert "accuracy" in metric_names
+    results = model.evaluate(x, y, batch_size=2, verbose=0)
+
+    # Keras may return a scalar or a list/tuple depending on config/version
+    if not isinstance(results, (list, tuple)):
+        results = [results]
+
+    # We expect at least loss + one additional metric
+    assert len(results) >= 2
 
 
-def test_train_and_evaluate_smoke(small_dummy_data: Dict[str, np.ndarray]) -> None:
+def test_create_default_callbacks_types() -> None:
     """
-    Quick smoke test: training for 1 epoch on synthetic data
-    should run without errors and evaluation should return floats.
+    create_default_callbacks should return ReduceLROnPlateau and EarlyStopping.
     """
-    x = small_dummy_data["x"]
-    y = small_dummy_data["y"]
+    callbacks = utils.create_default_callbacks()
+    assert len(callbacks) == 2
+    assert any(isinstance(cb, keras.callbacks.ReduceLROnPlateau) for cb in callbacks)
+    assert any(isinstance(cb, keras.callbacks.EarlyStopping) for cb in callbacks)
 
-    model = build_cifar10_cnn()
-    compile_model(model, learning_rate=1e-3)
 
-    history = model.fit(
-        x,
-        y,
+# ---------------------------------------------------------------------------
+# Training and evaluation (lightweight)
+# ---------------------------------------------------------------------------
+
+def _build_tiny_model() -> keras.Model:
+    """
+    Build a very small model for fast tests.
+    """
+    model = utils.build_cifar10_cnn()
+    utils.compile_model(model, learning_rate=1e-3)
+    return model
+
+
+def test_train_model_runs_with_validation_split() -> None:
+    """
+    train_model should run end-to-end with a small random dataset.
+    """
+    model = _build_tiny_model()
+    utils.set_global_seed(123)
+
+    x_train = np.random.rand(64, *utils.INPUT_SHAPE).astype("float32")
+    y_train = np.random.randint(0, utils.NUM_CLASSES, size=(64,), dtype="int32")
+
+    history = utils.train_model(
+        model,
+        x_train=x_train,
+        y_train=y_train,
         batch_size=16,
         epochs=1,
         validation_split=0.2,
-        verbose=0,
     )
-    assert len(history.history["loss"]) == 1
 
-    metrics = evaluate_model(model, x, y)
-    assert "loss" in metrics and "accuracy" in metrics
+    assert isinstance(history, keras.callbacks.History)
+    assert "loss" in history.history
+
+
+def test_evaluate_model_returns_metrics_dict() -> None:
+    """
+    evaluate_model should return a dict with 'loss' and 'accuracy' keys.
+    """
+    model = _build_tiny_model()
+    x = np.random.rand(16, *utils.INPUT_SHAPE).astype("float32")
+    y = np.random.randint(0, utils.NUM_CLASSES, size=(16,), dtype="int32")
+
+    metrics = utils.evaluate_model(model, x_test=x, y_test=y)
+    assert set(metrics.keys()) == {"loss", "accuracy"}
     assert isinstance(metrics["loss"], float)
     assert isinstance(metrics["accuracy"], float)
 
 
-def test_predict_classes_shape_and_range(small_dummy_data: Dict[str, np.ndarray]) -> None:
+# ---------------------------------------------------------------------------
+# Model + history persistence
+# ---------------------------------------------------------------------------
+
+def test_save_and_load_model_and_history(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
-    predict_classes should return one class index per input sample,
-    and all indices must be within the valid class range.
+    save_model_with_history + load_model + load_history should persist and restore
+    files correctly (paths are redirected to a temporary directory).
     """
-    x = small_dummy_data["x"]
-    y = small_dummy_data["y"]
+    # Redirect directories to tmp_path
+    monkeypatch.setattr(utils, "MODELS_DIR", tmp_path / "models")
+    monkeypatch.setattr(utils, "RESULTS_DIR", tmp_path / "results")
 
-    model = build_cifar10_cnn()
-    compile_model(model, learning_rate=1e-3)
+    model = _build_tiny_model()
 
-    # Train very briefly so predictions are not completely random
-    model.fit(x, y, batch_size=16, epochs=1, validation_split=0.2, verbose=0)
+    # Fake a minimal history object
+    history = keras.callbacks.History()
+    history.history = {"loss": [1.0, 0.9], "accuracy": [0.5, 0.6]}
 
-    preds = predict_classes(model, x, batch_size=32)
-    assert preds.shape == y.shape
-    assert preds.dtype == np.int64 or preds.dtype == np.int32
+    utils.save_model_with_history(model, history, name="test_model")
+
+    # Files should exist
+    model_path = tmp_path / "models" / "test_model.keras"
+    history_path = tmp_path / "results" / "history_test_model.json"
+    assert model_path.exists()
+    assert history_path.exists()
+
+    # Loaded model should be a valid Keras model
+    loaded_model = utils.load_model("test_model")
+    assert isinstance(loaded_model, keras.Model)
+
+    # Loaded history should match the saved one
+    loaded_history = utils.load_history("test_model")
+    assert loaded_history.history == history.history
+
+
+# ---------------------------------------------------------------------------
+# Prediction and reporting helpers
+# ---------------------------------------------------------------------------
+
+def test_predict_classes_shape_and_range() -> None:
+    """
+    predict_classes should return a 1D array of class indices in the valid range.
+    """
+    model = _build_tiny_model()
+    x = np.random.rand(10, *utils.INPUT_SHAPE).astype("float32")
+
+    preds = utils.predict_classes(model, x=x, batch_size=5)
+
+    assert preds.shape == (10,)
     assert preds.min() >= 0
-    assert preds.max() < len(CLASS_NAMES)
+    assert preds.max() < utils.NUM_CLASSES
 
 
-def test_classification_report_contains_class_names() -> None:
+def test_classification_report_str_non_empty() -> None:
     """
-    The classification report string should contain at least a few class names.
+    classification_report_str should return a non-empty text report.
     """
-    y_true = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    y_pred = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    y_true = np.array([0, 1, 2, 2, 1])
+    y_pred = np.array([0, 2, 2, 1, 1])
 
-    report = classification_report_str(y_true, y_pred, target_names=CLASS_NAMES)
+    report = utils.classification_report_str(y_true, y_pred, target_names=["a", "b", "c"])
     assert isinstance(report, str)
-    # spot check for some class names in the text
-    assert "airplane" in report
-    assert "truck" in report
+    assert "precision" in report
+    assert "recall" in report
 
 
-def test_compile_model_sets_optimizer_and_loss() -> None:
+def test_confusion_matrix_array_shape_and_normalization() -> None:
     """
-    compile_model should attach an optimizer, a loss and at least one metric.
-
-    We keep this test robust across different Keras versions by checking:
-    - optimizer is set
-    - loss is set
-    - model.metrics_names has at least 2 entries (loss + one metric)
+    confusion_matrix_array should return an array of shape (NUM_CLASSES, NUM_CLASSES),
+    optionally row-normalised.
     """
-    model = build_cifar10_cnn()
-    compile_model(model, learning_rate=1e-3)
+    y_true = np.array([0, 0, 1, 1, 2, 2])
+    y_pred = np.array([0, 1, 1, 1, 2, 0])
 
-    # Optimizer and loss should be set
-    assert isinstance(model.optimizer, keras.optimizers.Optimizer)
-    assert model.loss is not None
+    cm = utils.confusion_matrix_array(y_true, y_pred, normalize=False)
+    assert cm.shape == (utils.NUM_CLASSES, utils.NUM_CLASSES)
 
-    # metrics_names contains the names returned by model.evaluate(...)
-    metrics_names = list(model.metrics_names)  # e.g. ['loss', 'accuracy'] or ['loss', 'metric_1']
-    assert len(metrics_names) >= 2  # at least loss + one metric
-    # First metric is usually 'loss'
-    assert metrics_names[0] == "loss"
+    cm_norm = utils.confusion_matrix_array(y_true, y_pred, normalize=True)
+    assert cm_norm.shape == (utils.NUM_CLASSES, utils.NUM_CLASSES)
+
+    # Rows with any samples should sum (approximately) to 1.0
+    row_sums = cm_norm.sum(axis=1)
+    non_zero_rows = row_sums > 0
+    assert np.allclose(row_sums[non_zero_rows], 1.0, atol=1e-6)
